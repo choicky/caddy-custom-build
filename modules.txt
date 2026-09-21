@@ -1,3 +1,2 @@
 github.com/mholt/caddy-l4
 github.com/WeidiDeng/caddy-cloudflare-ip
-github.com/caddyserver/jsonc-adapter
