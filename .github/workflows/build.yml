@@ -69,7 +69,11 @@ jobs:
             modules="$("./$binary" list-modules --packages)"
             grep -Fq 'github.com/mholt/caddy-l4' <<<"$modules"
             grep -Fq 'github.com/WeidiDeng/caddy-cloudflare-ip' <<<"$modules"
-            grep -Fq 'github.com/caddyserver/jsonc-adapter' <<<"$modules"
+            grep -Fq 'github.com/caddyserver/jsonc-adapter' <<<"$modules" || {
+              echo "Required modules were not all found. Installed packages:" >&2
+              printf '%s\n' "$modules" >&2
+              exit 1
+            }
           else
             file "$binary"
           fi
