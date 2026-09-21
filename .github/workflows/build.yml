@@ -68,8 +68,7 @@ jobs:
             "./$binary" version
             modules="$("./$binary" list-modules --packages)"
             grep -Fq 'github.com/mholt/caddy-l4' <<<"$modules"
-            grep -Fq 'github.com/WeidiDeng/caddy-cloudflare-ip' <<<"$modules"
-            grep -Fq 'github.com/caddyserver/jsonc-adapter' <<<"$modules" || {
+            grep -Fq 'github.com/WeidiDeng/caddy-cloudflare-ip' <<<"$modules" || {
               echo "Required modules were not all found. Installed packages:" >&2
               printf '%s\n' "$modules" >&2
               exit 1
@@ -118,4 +117,4 @@ jobs:
             caddy-linux-arm64 \
             SHA256SUMS \
             --title "Caddy $version" \
-            --notes "Custom Caddy $version build with caddy-l4, caddy-cloudflare-ip, and jsonc-adapter."
+            --notes "Custom Caddy $version build with caddy-l4 and caddy-cloudflare-ip. JSONC support is provided by Caddy itself."
