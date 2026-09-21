@@ -1,0 +1,117 @@
+name: Build Caddy
+
+on:
+  workflow_dispatch:
+    inputs:
+      caddy_version:
+        description: Upstream Caddy tag, for example v2.11.4
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Validate version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ inputs.caddy_version }}'
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Invalid Caddy version: $version" >&2
+            exit 1
+          }
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          check-latest: true
+
+      - name: Install xcaddy
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+      - name: Build custom Caddy
+        shell: bash
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          xcaddy build '${{ inputs.caddy_version }}' \
+            --output "caddy-linux-${GOARCH}" \
+            --with github.com/mholt/caddy-l4 \
+            --with github.com/WeidiDeng/caddy-cloudflare-ip \
+            --with github.com/caddyserver/jsonc-adapter
+
+      - name: Verify binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="caddy-linux-${{ matrix.goarch }}"
+          test -x "$binary"
+
+          if [[ '${{ matrix.goarch }}' == 'amd64' ]]; then
+            "./$binary" version
+            modules="$("./$binary" list-modules --packages)"
+            grep -Fq 'github.com/mholt/caddy-l4' <<<"$modules"
+            grep -Fq 'github.com/WeidiDeng/caddy-cloudflare-ip' <<<"$modules"
+            grep -Fq 'github.com/caddyserver/jsonc-adapter' <<<"$modules"
+          else
+            file "$binary"
+          fi
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: caddy-linux-${{ matrix.goarch }}
+          path: caddy-linux-${{ matrix.goarch }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v5
+        with:
+          pattern: caddy-linux-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum caddy-linux-amd64 caddy-linux-arm64 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ inputs.caddy_version }}'
+          gh release create "$version" \
+            caddy-linux-amd64 \
+            caddy-linux-arm64 \
+            SHA256SUMS \
+            --title "Caddy $version" \
+            --notes "Custom Caddy $version build with caddy-l4, caddy-cloudflare-ip, and jsonc-adapter."
